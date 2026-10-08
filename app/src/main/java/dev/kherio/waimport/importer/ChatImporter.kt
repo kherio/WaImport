@@ -42,8 +42,16 @@ class ChatImporter(
         /** Remitente del TXT que eres tú (sus mensajes se importan como enviados). */
         val meName: String,
         val importMedia: Boolean,
-        val backup: Boolean
+        val backup: Boolean,
+        /**
+         * Para un contacto que aún no tiene chat: su JID ("34600111222@s.whatsapp.net"). El chat
+         * se crea al importar y [chatRowId] se ignora (si ya existiera, se usa ese).
+         */
+        val newChatJid: String? = null
     )
+
+    /** Contacto de WhatsApp con el que todavía no hay ningún chat. */
+    data class ContactInfo(val jid: String, val name: String)
 
     class Result(
         val imported: Int,
@@ -52,7 +60,9 @@ class ChatImporter(
         val mediaFailed: Int,
         /** Mensajes que no se importaron por no ser anteriores al primero del chat. */
         val skippedNotOlder: Int,
-        val backupFile: File?
+        val backupFile: File?,
+        /** True si hubo que crear el chat (el contacto no tenía uno). */
+        val chatCreated: Boolean = false
     )
 
     enum class Phase { BACKUP, MEDIA, MESSAGES }
@@ -94,6 +104,72 @@ class ChatImporter(
         return out
     }
 
+    /**
+     * Contactos de WhatsApp (leídos de wa.db) que no tienen todavía un chat. Si wa.db no se puede
+     * leer o no trae contactos, devuelve una lista vacía.
+     */
+    fun listContactsWithoutChat(contactsDb: File): List<ContactInfo> {
+        if (!contactsDb.exists() || !dbFile.exists()) return emptyList()
+        val taken = HashSet<String>()
+        openRead().use { db ->
+            db.rawQuery(
+                "SELECT j.raw_string FROM chat c JOIN jid j ON j._id = c.jid_row_id", null
+            ).use { c -> while (c.moveToNext()) c.getString(0)?.let { taken += it } }
+            try {
+                // Chats que WhatsApp guarda con el identificador LID de un contacto.
+                db.rawQuery(
+                    "SELECT jp.raw_string FROM chat c JOIN jid_map m ON m.lid_row_id = c.jid_row_id " +
+                            "JOIN jid jp ON jp._id = m.jid_row_id", null
+                ).use { c -> while (c.moveToNext()) c.getString(0)?.let { taken += it } }
+            } catch (_: Exception) {
+            }
+        }
+        val out = ArrayList<ContactInfo>()
+        val db = try {
+            SQLiteDatabase.openDatabase(contactsDb.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+        } catch (_: Exception) {
+            return emptyList()
+        }
+        db.use {
+            val cols = columnsOf(db, "wa_contacts").map { it.name }.toSet()
+            if ("jid" !in cols) return emptyList()
+            val nameCols = listOf("display_name", "wa_name", "given_name").filter { it in cols }
+            if (nameCols.isEmpty()) return emptyList()
+            val where = StringBuilder("jid LIKE '%@s.whatsapp.net'")
+            if ("is_whatsapp_user" in cols) where.append(" AND is_whatsapp_user = 1")
+            db.rawQuery(
+                "SELECT jid, ${nameCols.joinToString(", ")} FROM wa_contacts WHERE $where", null
+            ).use { c ->
+                while (c.moveToNext()) {
+                    val jid = c.getString(0) ?: continue
+                    if (jid in taken) continue
+                    val name = (1..nameCols.size).firstNotNullOfOrNull {
+                        c.getString(it)?.takeIf { n -> n.isNotBlank() }
+                    } ?: continue
+                    out += ContactInfo(jid, name)
+                }
+            }
+        }
+        return out.sortedBy { it.name.lowercase(Locale.ROOT) }
+    }
+
+    /** Fila del chat de este JID, también si WhatsApp lo guarda con el LID del mismo contacto. */
+    private fun findChatRowForJid(db: SQLiteDatabase, jid: String): Long? {
+        db.rawQuery(
+            "SELECT c._id FROM chat c JOIN jid j ON j._id = c.jid_row_id WHERE j.raw_string = ? LIMIT 1",
+            arrayOf(jid)
+        ).use { c -> if (c.moveToFirst()) return c.getLong(0) }
+        try {
+            db.rawQuery(
+                "SELECT c._id FROM chat c JOIN jid_map m ON m.lid_row_id = c.jid_row_id " +
+                        "JOIN jid jp ON jp._id = m.jid_row_id WHERE jp.raw_string = ? LIMIT 1",
+                arrayOf(jid)
+            ).use { c -> if (c.moveToFirst()) return c.getLong(0) }
+        } catch (_: Exception) {
+        }
+        return null
+    }
+
     private fun openRead(): SQLiteDatabase =
         SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
 
@@ -126,8 +202,12 @@ class ChatImporter(
     ): Result {
         if (!dbFile.exists()) throw ImportException(Code.DB_MISSING, "No existe msgstore.db")
 
-        val state = inspect(options.chatRowId)
-        val info = state.chat
+        val newJid = options.newChatJid
+        val existingRow = if (newJid != null) openRead().use { findChatRowForJid(it, newJid) }
+        else options.chatRowId
+        val state = if (existingRow != null) inspect(existingRow)
+        else inspectNew(newJid ?: throw ImportException(Code.CHAT_NOT_FOUND, "Falta el chat de destino"))
+        var info = state.chat
         val chatHasMessages = state.hasMessages
         val firstTimestamp = state.firstTimestamp
         val globalMin = state.globalMinSort
@@ -151,17 +231,23 @@ class ChatImporter(
 
         var backup: File? = null
         val createdFiles = ArrayList<File>()
+        var created: CreatedChat? = null
         try {
             if (options.backup) backup = backupDatabase(progress, isCancelled)
             if (options.importMedia && source != null) {
                 copyMedia(prepared, source, progress, isCancelled, createdFiles)
             }
             val sortIds = ImportRules.planSortIds(prepared.size, chatHasMessages, globalMin, globalMax)
+            if (existingRow == null) {
+                created = createChat(info.rawJid)
+                info = info.copy(rowId = created.chatRowId)
+            }
             val (importedCount, mediaCount, mediaFailed) =
                 insertAll(info, prepared, sortIds, !chatHasMessages, options, progress, isCancelled)
-            return Result(importedCount, mediaCount, mediaFailed, skipped, backup)
+            return Result(importedCount, mediaCount, mediaFailed, skipped, backup, created != null)
         } catch (e: Exception) {
             createdFiles.forEach { it.delete() }
+            created?.let { removeCreatedChat(it) }
             throw e
         }
     }
@@ -210,6 +296,95 @@ class ChatImporter(
         ).use { c ->
             if (!c.moveToFirst()) return null
             return ChatInfo(c.getLong(0), c.getString(1) ?: "", c.getString(2) == "g.us", c.getString(3))
+        }
+    }
+
+    /** Estado para un chat que todavía no existe: vacío, con los sort_id globales actuales. */
+    private fun inspectNew(jid: String): ChatState = openRead().use { db ->
+        val msgCols = columnsOf(db, "message").map { it.name }.toSet()
+        var gMin: Long? = null
+        var gMax: Long? = null
+        if ("sort_id" in msgCols) {
+            db.rawQuery("SELECT MIN(sort_id), MAX(sort_id) FROM message", null).use { c ->
+                c.moveToFirst()
+                gMin = if (c.isNull(0)) null else c.getLong(0)
+                gMax = if (c.isNull(1)) null else c.getLong(1)
+            }
+        }
+        ChatState(ChatInfo(0L, jid, false, null), false, null, gMin, gMax)
+    }
+
+    private class CreatedChat(val chatRowId: Long, val jidRowId: Long, val jidCreated: Boolean)
+
+    /** Crea la fila de `jid` (si no existe) y la del chat vacío de un contacto. */
+    private fun createChat(jid: String): CreatedChat {
+        val db = openWrite()
+        try {
+            db.beginTransaction()
+            try {
+                val user = jid.substringBefore('@')
+                val server = jid.substringAfter('@', "s.whatsapp.net")
+                var jidRow = -1L
+                var jidCreated = false
+                db.rawQuery(
+                    "SELECT _id FROM jid WHERE raw_string = ? OR (user = ? AND server = ?) LIMIT 1",
+                    arrayOf(jid, user, server)
+                ).use { c -> if (c.moveToFirst()) jidRow = c.getLong(0) }
+                if (jidRow < 0) {
+                    // Se copia el formato de otro contacto individual (agent, device, type...).
+                    val cv = db.rawQuery(
+                        "SELECT * FROM jid WHERE server = ? ORDER BY _id DESC LIMIT 1", arrayOf(server)
+                    ).use { c -> if (c.moveToFirst()) cursorToValues(c) else ContentValues() }
+                    cv.remove("_id")
+                    cv.put("user", user)
+                    cv.put("server", server)
+                    cv.put("raw_string", jid)
+                    fillRequired(columnsOf(db, "jid"), cv)
+                    jidRow = db.insertOrThrow("jid", null, cv)
+                    if (jidRow < 0) throw ImportException(Code.DB_ERROR, "No se pudo crear el contacto")
+                    jidCreated = true
+                }
+
+                val chatCols = columnsOf(db, "chat")
+                val names = chatCols.map { it.name }.toSet()
+                val cv = ContentValues()
+                cv.put("jid_row_id", jidRow)
+                if ("hidden" in names) cv.put("hidden", 0)
+                if ("archived" in names) cv.put("archived", 0)
+                if ("created_timestamp" in names) cv.put("created_timestamp", System.currentTimeMillis())
+                fillRequired(chatCols, cv)
+                val chatRow = db.insertOrThrow("chat", null, cv)
+                if (chatRow < 0) throw ImportException(Code.DB_ERROR, "No se pudo crear el chat")
+                db.setTransactionSuccessful()
+                return CreatedChat(chatRow, jidRow, jidCreated)
+            } finally {
+                db.endTransaction()
+            }
+        } catch (e: ImportException) {
+            throw e
+        } catch (e: Exception) {
+            throw ImportException(Code.DB_ERROR, e.message ?: "Error al crear el chat", e)
+        } finally {
+            db.close()
+        }
+    }
+
+    /** Deshace [createChat] si la importación falla: solo borra lo que sigue vacío. */
+    private fun removeCreatedChat(c: CreatedChat) {
+        try {
+            openWrite().use { db ->
+                db.execSQL(
+                    "DELETE FROM chat WHERE _id = ? AND NOT EXISTS (SELECT 1 FROM message WHERE chat_row_id = ?)",
+                    arrayOf(c.chatRowId, c.chatRowId)
+                )
+                if (c.jidCreated) {
+                    db.execSQL(
+                        "DELETE FROM jid WHERE _id = ? AND NOT EXISTS (SELECT 1 FROM chat WHERE jid_row_id = ?)",
+                        arrayOf(c.jidRowId, c.jidRowId)
+                    )
+                }
+            }
+        } catch (_: Exception) {
         }
     }
 

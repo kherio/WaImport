@@ -40,6 +40,8 @@ object S {
     const val import_chat_error_space_media = 35
     const val import_chat_error_open = 36
 
+    const val import_chat_new_suffix = 37
+
     private val en = arrayOf(
         "Import chat",
         "Reading file…",
@@ -78,6 +80,7 @@ object S {
         "Not enough free space for the database backup. Free some space or turn the backup off.",
         "Not enough free space for the attachments.",
         "The file could not be read: %1\$s",
+        "%1\$s (new chat)",
     )
 
     private val es = arrayOf(
@@ -118,6 +121,7 @@ object S {
         "No hay espacio libre para la copia de la base de datos. Libera espacio o desactiva la copia.",
         "No hay espacio libre para los adjuntos.",
         "No se pudo leer el archivo: %1\$s",
+        "%1\$s (chat nuevo)",
     )
 
     /** Texto en el idioma del dispositivo; los argumentos usan el formato de String.format. */

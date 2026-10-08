@@ -95,4 +95,25 @@ object Host {
     } catch (_: Throwable) {
         null
     }
+
+    /** Contactos del teléfono con número internacional (E.164) conocido: (nombre, solo dígitos). */
+    fun deviceContacts(context: Context): List<Pair<String, String>> = try {
+        val out = LinkedHashMap<String, String>()
+        context.contentResolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+            arrayOf(
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER
+            ), null, null, null
+        )?.use { c ->
+            while (c.moveToNext()) {
+                val name = c.getString(0)?.takeIf { it.isNotBlank() } ?: continue
+                val digits = c.getString(1)?.filter { it.isDigit() }?.takeIf { it.length in 7..15 } ?: continue
+                out.putIfAbsent(digits, name)
+            }
+        }
+        out.map { it.value to it.key }
+    } catch (_: Throwable) {
+        emptyList()
+    }
 }

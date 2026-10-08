@@ -34,7 +34,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
 
-    private class ChatChoice(val info: ChatImporter.ChatInfo, val name: String)
+    private class ChatChoice(
+        val info: ChatImporter.ChatInfo?,
+        val name: String,
+        /** Texto que se muestra en las listas. */
+        val label: String = name,
+        /** JID del contacto cuando aún no tiene chat (se crea al importar). */
+        val newJid: String? = null
+    ) {
+        val isGroup: Boolean get() = info?.isGroup == true
+    }
 
     private var source: ChatImportSource? = null
     private var parsed: ParsedChat? = null
@@ -78,7 +87,7 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
                     return@Thread
                 }
                 parsed = chat
-                chats = importer().listChats().map { ChatChoice(it, displayName(it)) }
+                chats = importer().listChats().map { ChatChoice(it, displayName(it)) } + loadNewContacts()
                 selectedChat = guessChat()
                 meIndex = guessMe(chat)
                 ui { progress.dismiss(); showOptions() }
@@ -115,6 +124,26 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
     }
 
     // ------------------------------------------------------------------ nombres de chats
+
+    /** Contactos sin chat: de la agenda de WhatsApp (wa.db) o, si no hay, de la del teléfono. */
+    private fun loadNewContacts(): List<ChatChoice> {
+        val imp = importer()
+        var contacts = try {
+            imp.listContactsWithoutChat(File(Host.accountDataDir(activity), "databases/wa.db"))
+        } catch (e: Throwable) {
+            Host.log(e)
+            emptyList()
+        }
+        if (contacts.isEmpty()) {
+            val taken = chats.mapNotNull { it.info?.rawJid }.toSet()
+            contacts = Host.deviceContacts(activity)
+                .map { (name, digits) -> ChatImporter.ContactInfo("$digits@s.whatsapp.net", name) }
+                .filter { it.jid !in taken }
+        }
+        return contacts.map {
+            ChatChoice(null, it.name, str(S.import_chat_new_suffix, it.name), it.jid)
+        }
+    }
 
     private fun displayName(info: ChatImporter.ChatInfo): String {
         if (info.isGroup) {
@@ -153,7 +182,7 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
 
     /** En un chat individual, tú eres el participante que no se llama como el contacto. */
     private fun guessMe(chat: ParsedChat): Int {
-        val other = selectedChat?.takeIf { !it.info.isGroup }?.name ?: return 0
+        val other = selectedChat?.takeIf { !it.isGroup }?.name ?: return 0
         if (chat.speakers.size != 2) return 0
         val i = chat.speakers.indexOfFirst { normalizeName(it) == normalizeName(other) }
         return if (i >= 0) 1 - i else 0
@@ -203,7 +232,7 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
         root.addView(label(str(S.import_chat_destination)))
         val chatButton = Button(activity)
         fun refreshChatButton() {
-            chatButton.text = selectedChat?.name ?: str(S.import_chat_pick)
+            chatButton.text = selectedChat?.label ?: str(S.import_chat_pick)
         }
         refreshChatButton()
         root.addView(chatButton, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -222,7 +251,7 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
                 selectedChat = picked
                 refreshChatButton()
                 val guess = guessMe(chat)
-                if (picked != null && !picked.info.isGroup && chat.speakers.size == 2) {
+                if (picked != null && !picked.isGroup && chat.speakers.size == 2) {
                     meSpinner.setSelection(guess)
                 }
             }
@@ -317,7 +346,7 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
         }
         val shown = ArrayList(chats)
         val adapter = ArrayAdapter(
-            activity, android.R.layout.simple_list_item_1, shown.map { it.name }.toMutableList()
+            activity, android.R.layout.simple_list_item_1, shown.map { it.label }.toMutableList()
         )
         val list = ListView(activity).apply { this.adapter = adapter }
         layout.addView(search)
@@ -331,7 +360,7 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
                 shown.clear()
                 shown.addAll(chats.filter { q.isEmpty() || normalizeName(it.name).contains(q) })
                 adapter.clear()
-                adapter.addAll(shown.map { it.name })
+                adapter.addAll(shown.map { it.label })
             }
         })
 
@@ -352,7 +381,7 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
         val chat = parsed ?: return
         val target = selectedChat ?: return
         val me = chat.speakers.getOrNull(meIndex) ?: return
-        val options = ChatImporter.Options(target.info.rowId, me, importMedia, backup)
+        val options = ChatImporter.Options(target.info?.rowId ?: 0L, me, importMedia, backup, target.newJid)
 
         cancelled.set(false)
         val progress = ProgressUi(str(S.import_chat_reading), cancelable = true)

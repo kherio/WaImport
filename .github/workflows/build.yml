@@ -1,10 +1,14 @@
-name: Build
+name: Build and release
 
 on:
   push:
     branches: [main]
-  pull_request:
+    paths:
+      - "app/**"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -22,11 +26,34 @@ jobs:
       - name: Unit tests
         run: ./gradlew testDebugUnitTest
 
-      - name: Build debug APK
+      - name: Build APK
         run: ./gradlew assembleDebug
+
+      - name: Name the APK after the version
+        id: apk
+        run: |
+          VER=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          cp app/build/outputs/apk/debug/app-debug.apk "waimport-$VER.apk"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "file=waimport-$VER.apk" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: WaImport-debug
-          path: app/build/outputs/apk/debug/*.apk
+          name: waimport-${{ steps.apk.outputs.version }}
+          path: ${{ steps.apk.outputs.file }}
           if-no-files-found: error
+
+      # Una release por versión (tag vX.Y.Z): cada cambio en app/ reconstruye y reemplaza la de
+      # la versión actual. Para publicar una nueva, sube versionName en app/build.gradle.kts.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.apk.outputs.version }}
+          FILE: ${{ steps.apk.outputs.file }}
+        run: |
+          gh release delete "v$VER" --cleanup-tag --yes || true
+          gh release create "v$VER" "$FILE#waimport $VER.apk" \
+            --target "$GITHUB_SHA" \
+            --title "waimport $VER" \
+            --notes "APK generado desde el commit ${GITHUB_SHA::7}." \
+            --latest

@@ -16,6 +16,17 @@ android {
         versionName = "0.1.0"
     }
 
+    // Clave de debug fija (en el repo): todos los APK llevan la misma firma y se pueden
+    // instalar unos sobre otros sin desinstalar.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

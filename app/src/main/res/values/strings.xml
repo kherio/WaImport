@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WaChatImport</string>
+    <string name="xposed_description">Adds \"Import chat\" to the WhatsApp menu: loads a chat export (.txt or .zip with attachments) into an existing chat.</string>
+</resources>

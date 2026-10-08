@@ -34,7 +34,9 @@ class ChatImporter(
         val rowId: Long,
         val rawJid: String,
         val isGroup: Boolean,
-        val subject: String?
+        val subject: String?,
+        /** Para un chat guardado con LID: el número de teléfono del mismo contacto, si se conoce. */
+        val phoneJid: String? = null
     )
 
     class Options(
@@ -98,6 +100,50 @@ class ChatImporter(
                         c.getLong(0), c.getString(1) ?: continue,
                         c.getString(2) == "g.us", c.getString(3)
                     )
+                }
+            }
+        }
+        val phoneByLid = HashMap<String, String>()
+        try {
+            openRead().use { db ->
+                db.rawQuery(
+                    "SELECT l.raw_string, p.raw_string FROM jid_map m " +
+                            "JOIN jid l ON l._id = m.lid_row_id JOIN jid p ON p._id = m.jid_row_id", null
+                ).use { c ->
+                    while (c.moveToNext()) {
+                        val lid = c.getString(0) ?: continue
+                        val phone = c.getString(1) ?: continue
+                        phoneByLid[lid] = phone
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return if (phoneByLid.isEmpty()) out
+        else out.map { if (it.rawJid in phoneByLid) it.copy(phoneJid = phoneByLid[it.rawJid]) else it }
+    }
+
+    /** Nombres de la agenda de WhatsApp (wa.db): JID → nombre. Vacío si no se puede leer. */
+    fun contactNames(contactsDb: File): Map<String, String> {
+        if (!contactsDb.exists()) return emptyMap()
+        val db = try {
+            SQLiteDatabase.openDatabase(contactsDb.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+        } catch (_: Exception) {
+            return emptyMap()
+        }
+        val out = HashMap<String, String>()
+        db.use {
+            val cols = columnsOf(db, "wa_contacts").map { it.name }.toSet()
+            if ("jid" !in cols) return emptyMap()
+            val nameCols = listOf("display_name", "wa_name", "given_name", "nickname").filter { it in cols }
+            if (nameCols.isEmpty()) return emptyMap()
+            db.rawQuery("SELECT jid, ${nameCols.joinToString(", ")} FROM wa_contacts", null).use { c ->
+                while (c.moveToNext()) {
+                    val jid = c.getString(0) ?: continue
+                    val name = (1..nameCols.size).firstNotNullOfOrNull {
+                        c.getString(it)?.takeIf { n -> n.isNotBlank() }
+                    } ?: continue
+                    out[jid] = name
                 }
             }
         }

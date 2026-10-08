@@ -90,6 +90,7 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
                     return@Thread
                 }
                 parsed = chat
+                contactNames = importer().contactNames(File(Host.accountDataDir(activity), "databases/wa.db"))
                 chats = importer().listChats().map { ChatChoice(it, displayName(it)) } + loadNewContacts()
                 selectedChat = guessChat()
                 newChatMode = selectedChat?.newJid != null
@@ -149,19 +150,31 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
         }
     }
 
+    private var contactNames: Map<String, String> = emptyMap()
+
     private fun displayName(info: ChatImporter.ChatInfo): String {
         if (info.isGroup) {
             val subject = info.subject?.takeIf { it.isNotBlank() } ?: info.rawJid.substringBefore('@')
             return str(S.import_chat_group_suffix, subject)
         }
-        if (info.rawJid.endsWith("@s.whatsapp.net")) {
-            Host.contactName(activity, info.rawJid.substringBefore('@'))?.let { return it }
+        // Nombre en la agenda de WhatsApp, por el JID del chat o por el número del mismo contacto.
+        contactNames[info.rawJid]?.let { return it }
+        info.phoneJid?.let { phone -> contactNames[phone]?.let { return it } }
+        // Nombre en la agenda del teléfono.
+        val phoneDigits = (info.phoneJid ?: info.rawJid.takeIf { it.endsWith("@s.whatsapp.net") })
+            ?.substringBefore('@')
+        if (phoneDigits != null) {
+            Host.contactName(activity, phoneDigits)?.let { return it }
+            return "+$phoneDigits"
         }
-        val user = info.rawJid.substringBefore('@')
-        return if (info.rawJid.endsWith("@s.whatsapp.net")) "+$user" else user
+        return info.rawJid.substringBefore('@')
     }
 
-    private fun normalizeName(s: String) = s.lowercase(Locale.ROOT).replace(Regex("""[\s ]+"""), " ").trim()
+    /** Minúsculas, sin acentos y con espacios simples, para buscar y comparar nombres. */
+    private fun normalizeName(s: String): String =
+        java.text.Normalizer.normalize(s.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+            .replace(Regex("[\\s\u00A0\u202F]+"), " ").trim()
 
     /** Intenta deducir el chat a partir del nombre del archivo ("Chat de WhatsApp con Ana.zip"). */
     private fun guessChat(): ChatChoice? {

@@ -1,12 +1,16 @@
 package dev.kherio.waimport
 
 import android.app.Activity
+import android.app.Application
+import android.app.Instrumentation
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.view.Menu
 import dev.kherio.waimport.importer.ImportChatFlow
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
+import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import java.lang.reflect.Method
 
@@ -19,18 +23,43 @@ class ModuleMain : IXposedHookLoadPackage {
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         if (lpparam.packageName != "com.whatsapp" && lpparam.packageName != "com.whatsapp.w4b") return
         if (lpparam.processName != lpparam.packageName) return
-        try {
-            hookHome(lpparam.classLoader)
-        } catch (t: Throwable) {
-            Host.log(t)
-        }
+        Host.log("cargado en ${lpparam.packageName}")
+        // La clase de la pantalla principal se localiza por el manifiesto cuando la app ya existe.
+        XposedHelpers.findAndHookMethod(
+            Instrumentation::class.java, "callApplicationOnCreate", Application::class.java,
+            object : XC_MethodHook() {
+                private var done = false
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    if (done) return
+                    done = true
+                    try {
+                        val app = param.args[0] as Application
+                        hookHome(app, lpparam.classLoader)
+                    } catch (t: Throwable) {
+                        Host.log(t)
+                    }
+                }
+            })
     }
 
-    private fun hookHome(cl: ClassLoader) {
-        // El nombre de HomeActivity está en el manifiesto de WhatsApp, así que no está ofuscado.
-        val home = cl.loadClass("com.whatsapp.HomeActivity")
+    @Suppress("DEPRECATION")
+    private fun findHomeClass(app: Application, cl: ClassLoader): Class<*> {
+        val names = app.packageManager
+            .getPackageInfo(app.packageName, PackageManager.GET_ACTIVITIES)
+            .activities?.map { it.name }.orEmpty()
+        val name = names.firstOrNull { it.endsWith(".HomeActivity") }
+            ?: names.firstOrNull { it.endsWith("HomeActivity") }
+            ?: throw ClassNotFoundException("HomeActivity no está en el manifiesto (${names.size} actividades)")
+        Host.log("pantalla principal: $name")
+        return cl.loadClass(name)
+    }
+
+    private fun hookHome(app: Application, cl: ClassLoader) {
+        val home = findHomeClass(app, cl)
 
         val onCreateMenu = findDeclared(home, "onCreateOptionsMenu", Menu::class.java)
+        Host.log("hook de menú en ${onCreateMenu.declaringClass.name}")
+
         XposedBridge.hookMethod(onCreateMenu, object : XC_MethodHook() {
             override fun afterHookedMethod(param: MethodHookParam) {
                 val menu = param.args[0] as? Menu ?: return

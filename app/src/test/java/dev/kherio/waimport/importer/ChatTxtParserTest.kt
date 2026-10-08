@@ -181,4 +181,23 @@ class ChatTxtParserTest {
         val chat = ChatTxtParser.parse("", zone = utc)
         assertTrue(chat.messages.isEmpty())
     }
+
+    @Test
+    fun androidSpanish_doubleSpaceBeforeDash_realExport() {
+        // Exportación real: tras la hora hay dos espacios (o un espacio especial + espacio).
+        val nnbsp = "\u202F"
+        val txt = "15/11/24, 10:35  - Los mensajes y las llamadas están cifrados de extremo a extremo.\n" +
+            "15/11/24, 10:35 ${nnbsp}- Javier San José: Ey tío q tal...\n" +
+            "15/11/24, 10:36  - Javier San José: Oye Liam no estaba en liga R?\n" +
+            "15/11/24, 10:37  - Edison: IMG-20241115-WA0001.jpg (archivo adjunto)\n" +
+            "15/11/24, 10:39  - Edison: Que tal??"
+
+        val chat = ChatTxtParser.parse(txt, zone = utc) { it == "IMG-20241115-WA0001.jpg" }
+
+        assertEquals(4, chat.messages.size)
+        assertEquals(1, chat.systemMessages)
+        assertEquals(listOf("Javier San José", "Edison"), chat.speakers)
+        assertEquals("IMG-20241115-WA0001.jpg", chat.messages[2].attachmentName)
+        assertEquals(ms(2024, 11, 15, 10, 35), chat.messages[0].timestamp)
+    }
 }

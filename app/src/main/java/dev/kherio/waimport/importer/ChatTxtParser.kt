@@ -55,7 +55,7 @@ object ChatTxtParser {
     private val HEADER_BRACKET = Regex("""^\[$DATE,?\s+$TIME$AMPM]\s?(.*)$""")
 
     // Android: 12/05/2024, 10:32 - Nombre: texto
-    private val HEADER_DASH = Regex("""^$DATE,?\s+$TIME$AMPM\s[-–—]\s(.*)$""")
+    private val HEADER_DASH = Regex("""^$DATE,?\s+$TIME$AMPM\s+[-–—]\s(.*)$""")
 
     // iOS: <attached: 00000012-PHOTO-2024-05-12-10-32-05.jpg> (la palabra depende del idioma)
     private val ATTACH_IOS = Regex("""^<[^:<>]{1,40}:\s*(.+?)>$""")

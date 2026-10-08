@@ -74,7 +74,7 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
                 source = src
                 val chat = src.parse()
                 if (chat.messages.isEmpty()) {
-                    ui { progress.dismiss(); showMessage(str(S.import_chat_error_title), str(S.import_chat_error_empty)); finish() }
+                    ui { progress.dismiss(); showMessage(str(S.import_chat_error_title), str(S.import_chat_error_empty) + "\n\n" + src.sample()); finish() }
                     return@Thread
                 }
                 parsed = chat

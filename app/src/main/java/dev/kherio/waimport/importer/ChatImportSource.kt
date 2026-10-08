@@ -38,6 +38,36 @@ class ChatImportSource private constructor(
             ChatTxtParser.parse(reader, order, zone) { hasFile(it) }
         }
 
+    /**
+     * Las primeras líneas del archivo de chat, con los caracteres invisibles o especiales como
+     * <U+XXXX>, para diagnosticar formatos que el lector no reconoce.
+     */
+    fun sample(maxLines: Int = 4, maxChars: Int = 90): String = try {
+        val sb = StringBuilder("Archivo: ${chatFile.length()} bytes")
+        sb.append(if (zip != null) ", ZIP con ${media.size} adjuntos" else ", texto")
+        var shown = 0
+        chatFile.bufferedReader(Charsets.UTF_8).use { r ->
+            while (shown < maxLines) {
+                val line = r.readLine() ?: break
+                if (line.isBlank()) continue
+                shown++
+                sb.append('\n').append(shown).append(": ")
+                var n = 0
+                for (ch in line) {
+                    if (n >= maxChars) { sb.append('…'); break }
+                    if (ch.code < 32 || ch.code in 127..160 || ch.code in 0x2000..0x206F || ch.code == 0xFEFF) {
+                        sb.append("<U+").append("%04X".format(ch.code)).append('>')
+                    } else sb.append(ch)
+                    n++
+                }
+            }
+        }
+        if (shown == 0) sb.append("\n(vacío)")
+        sb.toString()
+    } catch (e: Exception) {
+        "No se pudo leer la muestra: ${e.message}"
+    }
+
     /** Flujo del adjunto, o null si el ZIP no lo trae. Quien lo llama debe cerrarlo. */
     fun openMedia(name: String): InputStream? {
         val entry = entryFor(name) ?: return null

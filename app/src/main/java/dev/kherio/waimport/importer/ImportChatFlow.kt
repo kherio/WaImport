@@ -13,6 +13,8 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.ListView
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -52,6 +54,7 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
 
     // Estado de las opciones; se conserva si el diálogo se vuelve a mostrar.
     private var selectedChat: ChatChoice? = null
+    private var newChatMode = false
     private var meIndex = 0
     private var orderChoice = 0 // 0 automático, 1 día/mes, 2 mes/día
     private var importMedia = true
@@ -89,6 +92,7 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
                 parsed = chat
                 chats = importer().listChats().map { ChatChoice(it, displayName(it)) } + loadNewContacts()
                 selectedChat = guessChat()
+                newChatMode = selectedChat?.newJid != null
                 meIndex = guessMe(chat)
                 ui { progress.dismiss(); showOptions() }
             } catch (e: Throwable) {
@@ -228,14 +232,35 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
         }
         root.addView(summary)
 
-        // Chat de destino
+        // Chat de destino: uno existente o uno nuevo con un contacto
         root.addView(label(str(S.import_chat_destination)))
+        val modeGroup = RadioGroup(activity).apply { orientation = RadioGroup.VERTICAL }
+        val rbExisting = RadioButton(activity).apply {
+            id = View.generateViewId(); text = str(S.import_chat_mode_existing)
+            setTextColor(Host.textColor(activity))
+        }
+        val rbNew = RadioButton(activity).apply {
+            id = View.generateViewId(); text = str(S.import_chat_mode_new)
+            setTextColor(Host.textColor(activity))
+        }
+        modeGroup.addView(rbExisting)
+        modeGroup.addView(rbNew)
+        modeGroup.check(if (newChatMode) rbNew.id else rbExisting.id)
+        root.addView(modeGroup)
+
         val chatButton = Button(activity)
         fun refreshChatButton() {
-            chatButton.text = selectedChat?.label ?: str(S.import_chat_pick)
+            chatButton.text = selectedChat?.label
+                ?: str(if (newChatMode) S.import_chat_pick_contact else S.import_chat_pick)
         }
         refreshChatButton()
         root.addView(chatButton, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+
+        modeGroup.setOnCheckedChangeListener { _, checked ->
+            newChatMode = checked == rbNew.id
+            if (selectedChat != null && (selectedChat?.newJid != null) != newChatMode) selectedChat = null
+            refreshChatButton()
+        }
 
         // Quién eres tú
         root.addView(label(str(S.import_chat_me)))
@@ -339,12 +364,13 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), dp(8))
         }
+        val pool = chats.filter { (it.newJid != null) == newChatMode }
         val search = EditText(activity).apply {
-            hint = str(S.import_chat_search_hint)
+            hint = str(if (newChatMode) S.import_chat_search_contact_hint else S.import_chat_search_hint)
             setSingleLine()
             setTextColor(Host.textColor(activity))
         }
-        val shown = ArrayList(chats)
+        val shown = ArrayList(pool)
         val adapter = ArrayAdapter(
             activity, android.R.layout.simple_list_item_1, shown.map { it.label }.toMutableList()
         )
@@ -356,9 +382,17 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                val q = normalizeName(s?.toString() ?: "")
+                val raw = s?.toString() ?: ""
+                val q = normalizeName(raw)
                 shown.clear()
-                shown.addAll(chats.filter { q.isEmpty() || normalizeName(it.name).contains(q) })
+                shown.addAll(pool.filter { q.isEmpty() || normalizeName(it.name).contains(q) })
+                if (newChatMode) {
+                    // Un número escrito a mano sirve aunque no esté en la agenda.
+                    val digits = raw.filter { it.isDigit() }
+                    if (digits.length in 7..15 && raw.all { it.isDigit() || it in "+ -()" }) {
+                        shown.add(0, ChatChoice(null, "+$digits", str(S.import_chat_use_number, digits), "$digits@s.whatsapp.net"))
+                    }
+                }
                 adapter.clear()
                 adapter.addAll(shown.map { it.label })
             }

@@ -42,6 +42,12 @@ object S {
 
     const val import_chat_new_suffix = 37
 
+    const val import_chat_mode_existing = 38
+    const val import_chat_mode_new = 39
+    const val import_chat_pick_contact = 40
+    const val import_chat_search_contact_hint = 41
+    const val import_chat_use_number = 42
+
     private val en = arrayOf(
         "Import chat",
         "Reading file…",
@@ -81,6 +87,11 @@ object S {
         "Not enough free space for the attachments.",
         "The file could not be read: %1\$s",
         "%1\$s (new chat)",
+        "Existing chat",
+        "Create a new chat with a contact",
+        "Choose contact…",
+        "Search a contact or type a number",
+        "Use number +%1\$s (new chat)",
     )
 
     private val es = arrayOf(
@@ -122,6 +133,11 @@ object S {
         "No hay espacio libre para los adjuntos.",
         "No se pudo leer el archivo: %1\$s",
         "%1\$s (chat nuevo)",
+        "Chat existente",
+        "Crear un chat nuevo con un contacto",
+        "Elegir contacto…",
+        "Busca un contacto o escribe un número",
+        "Usar el número +%1\$s (chat nuevo)",
     )
 
     /** Texto en el idioma del dispositivo; los argumentos usan el formato de String.format. */

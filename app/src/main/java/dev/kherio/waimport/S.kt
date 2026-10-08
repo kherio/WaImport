@@ -1,4 +1,4 @@
-package dev.kherio.wachatimport
+package dev.kherio.waimport
 
 /** Textos del módulo (inglés y español). Se usan en vez de recursos porque el código corre dentro de WhatsApp. */
 object S {

@@ -1,4 +1,4 @@
-package dev.kherio.wachatimport.importer
+package dev.kherio.waimport.importer
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

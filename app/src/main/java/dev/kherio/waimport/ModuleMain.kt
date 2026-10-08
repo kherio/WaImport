@@ -1,9 +1,9 @@
-package dev.kherio.wachatimport
+package dev.kherio.waimport
 
 import android.app.Activity
 import android.content.Intent
 import android.view.Menu
-import dev.kherio.wachatimport.importer.ImportChatFlow
+import dev.kherio.waimport.importer.ImportChatFlow
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge

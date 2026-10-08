@@ -1,4 +1,4 @@
-package dev.kherio.wachatimport
+package dev.kherio.waimport
 
 import android.app.AlertDialog
 import android.content.Context

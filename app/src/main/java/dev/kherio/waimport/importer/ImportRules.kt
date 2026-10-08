@@ -1,4 +1,4 @@
-package dev.kherio.wachatimport.importer
+package dev.kherio.waimport.importer
 
 import java.security.MessageDigest
 import java.time.Instant

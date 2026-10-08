@@ -1,4 +1,4 @@
-package dev.kherio.wachatimport.importer
+package dev.kherio.waimport.importer
 
 import android.app.Activity
 import android.net.Uri
@@ -19,9 +19,9 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
-import dev.kherio.wachatimport.Dlg
-import dev.kherio.wachatimport.Host
-import dev.kherio.wachatimport.S
+import dev.kherio.waimport.Dlg
+import dev.kherio.waimport.Host
+import dev.kherio.waimport.S
 import java.io.File
 import java.text.DateFormat
 import java.util.Date

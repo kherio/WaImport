@@ -1,4 +1,4 @@
-# WaChatImport
+# WaImport
 
 Módulo LSPosed independiente que añade **Importar chat** al menú de la pantalla principal de
 WhatsApp y WhatsApp Business. Carga una exportación de chat de WhatsApp ("Exportar chat") en un

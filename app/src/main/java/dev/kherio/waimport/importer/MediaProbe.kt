@@ -1,4 +1,4 @@
-package dev.kherio.wachatimport.importer
+package dev.kherio.waimport.importer
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory

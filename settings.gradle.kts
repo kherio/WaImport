@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "WaChatImport"
+rootProject.name = "WaImport"
 include(":app")

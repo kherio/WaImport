@@ -1,4 +1,4 @@
-package dev.kherio.wachatimport.importer
+package dev.kherio.waimport.importer
 
 import android.content.ContentValues
 import android.database.Cursor

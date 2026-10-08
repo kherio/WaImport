@@ -1,4 +1,4 @@
-package dev.kherio.wachatimport
+package dev.kherio.waimport
 
 import android.app.Activity
 import android.content.Context
@@ -62,11 +62,11 @@ object Host {
     }
 
     fun log(t: Throwable) {
-        XposedBridge.log("[WaChatImport] " + android.util.Log.getStackTraceString(t))
+        XposedBridge.log("[WaImport] " + android.util.Log.getStackTraceString(t))
     }
 
     fun log(msg: String) {
-        XposedBridge.log("[WaChatImport] $msg")
+        XposedBridge.log("[WaImport] $msg")
     }
 
     /** Color de texto del tema actual, con una alternativa según modo claro/oscuro. */

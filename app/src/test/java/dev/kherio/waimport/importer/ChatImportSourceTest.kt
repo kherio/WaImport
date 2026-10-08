@@ -1,4 +1,4 @@
-package dev.kherio.wachatimport.importer
+package dev.kherio.waimport.importer
 
 import org.junit.After
 import org.junit.Assert.assertArrayEquals

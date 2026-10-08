@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "dev.kherio.wachatimport"
+    namespace = "dev.kherio.waimport"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "dev.kherio.wachatimport"
+        applicationId = "dev.kherio.waimport"
         minSdk = 28
         targetSdk = 34
         versionCode = 1

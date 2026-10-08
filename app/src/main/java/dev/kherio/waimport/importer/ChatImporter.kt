@@ -345,10 +345,19 @@ class ChatImporter(
                     jidCreated = true
                 }
 
+                // Si WhatsApp conoce el LID del contacto, el chat cuelga del LID y no del número.
+                var chatJidRow = jidRow
+                try {
+                    db.rawQuery(
+                        "SELECT lid_row_id FROM jid_map WHERE jid_row_id = ? LIMIT 1", arrayOf(jidRow.toString())
+                    ).use { c -> if (c.moveToFirst()) chatJidRow = c.getLong(0) }
+                } catch (_: Exception) {
+                }
+
                 val chatCols = columnsOf(db, "chat")
                 val names = chatCols.map { it.name }.toSet()
                 val cv = ContentValues()
-                cv.put("jid_row_id", jidRow)
+                cv.put("jid_row_id", chatJidRow)
                 if ("hidden" in names) cv.put("hidden", 0)
                 if ("archived" in names) cv.put("archived", 0)
                 if ("created_timestamp" in names) cv.put("created_timestamp", System.currentTimeMillis())

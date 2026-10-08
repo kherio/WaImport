@@ -451,6 +451,12 @@ class ImportChatFlow(private val activity: Activity, private val uri: Uri) {
         val extra = StringBuilder()
         if (r.mediaFailed > 0) extra.append(str(S.import_chat_done_media_failed, r.mediaFailed))
         if (r.skippedNotOlder > 0) extra.append(str(S.import_chat_done_skipped, r.skippedNotOlder))
+        if (r.chatCreated) {
+            val last = parsed?.messages?.lastOrNull()?.timestamp
+            if (last != null) {
+                extra.append(str(S.import_chat_done_created, DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(last))))
+            }
+        }
         r.backupFile?.let { extra.append(str(S.import_chat_done_backup, it.name)) }
         Dlg(activity)
             .setTitle(str(S.import_chat_done_title))

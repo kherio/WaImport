@@ -48,6 +48,8 @@ object S {
     const val import_chat_search_contact_hint = 41
     const val import_chat_use_number = 42
 
+    const val import_chat_done_created = 43
+
     private val en = arrayOf(
         "Import chat",
         "Reading file…",
@@ -92,6 +94,7 @@ object S {
         "Choose contact…",
         "Search a contact or type a number",
         "Use number +%1\$s (new chat)",
+        "\nNew chat created. It is listed by the date of its last message (%1\$s), so it may be far down the list: search for the contact by name.",
     )
 
     private val es = arrayOf(
@@ -138,6 +141,7 @@ object S {
         "Elegir contacto…",
         "Busca un contacto o escribe un número",
         "Usar el número +%1\$s (chat nuevo)",
+        "\nChat nuevo creado. Aparece según la fecha de su último mensaje (%1\$s), así que puede estar muy abajo: búscalo por el nombre del contacto.",
     )
 
     /** Texto en el idioma del dispositivo; los argumentos usan el formato de String.format. */
